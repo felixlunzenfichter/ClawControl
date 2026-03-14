@@ -2,12 +2,19 @@
 - [ ] story
 - [ ] impl
 
-## Summary
+## Single-Intent
+<!-- REQUIRED for story PRs: one capability only -->
+Single-Intent:
 
-<!-- Short description -->
+## Out-of-Scope
+<!-- REQUIRED for story PRs -->
+- 
+
+## Summary
+<!-- Keep tightly scoped to Single-Intent -->
 
 ## Policy fields
-- Labels: add exactly one label (`story` or `impl`)
-- For impl PRs, required: `Story-PR: #<number>`
+- Labels: exactly one of `story` or `impl`
+- Impl PRs required field: `Story-PR: #<number>`
 
 Story-PR: #

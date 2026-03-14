@@ -26,11 +26,45 @@ jobs:
               return;
             }
 
+            const body = pr.body || '';
+
             if (isStory) {
+              const { data: openPulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+              });
+
+              let openStoryCount = 0;
+              for (const p of openPulls) {
+                const { data: issue } = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: p.number,
+                });
+                const ls = (issue.labels || []).map(l => (l.name || '').toLowerCase());
+                if (ls.includes('story')) openStoryCount++;
+              }
+
+              if (openStoryCount > 1) {
+                core.setFailed('Only one open story PR is allowed at a time.');
+                return;
+              }
+
+              if (!/Single-Intent:\s*\S+/i.test(body)) {
+                core.setFailed('Story PR must include `Single-Intent:` with one capability.');
+                return;
+              }
+
+              if (!/Out-of-Scope:\s*[\s\S]*\S/i.test(body)) {
+                core.setFailed('Story PR must include `Out-of-Scope:` exclusions.');
+                return;
+              }
+
               return;
             }
 
-            const body = pr.body || '';
             const match = body.match(/Story-PR:\s*#(\d+)/i) || body.match(/(?:story\s*pr|story)\s*#(\d+)/i);
             if (!match) {
               core.setFailed('Impl PR must reference a Story PR in the body, e.g. `Story-PR: #123`.');
