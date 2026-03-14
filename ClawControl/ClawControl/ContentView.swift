@@ -18,7 +18,33 @@ struct LogRow: Identifiable {
     let message: String
 }
 
+@MainActor
 struct ContentView: View {
+    @StateObject private var conversationStore: ConversationStore
+
+    init(conversationStore: ConversationStore? = nil) {
+        _conversationStore = StateObject(wrappedValue: conversationStore ?? ConversationStore(service: InMemoryConversationService()))
+    }
+
+    var body: some View {
+        TabView {
+            LogsView()
+                .tabItem {
+                    Label("Logs", systemImage: "list.bullet.rectangle")
+                }
+
+            ConversationView(store: conversationStore)
+                .tabItem {
+                    Label("Conversation", systemImage: "message")
+                }
+        }
+        .task {
+            await conversationStore.onAppStart()
+        }
+    }
+}
+
+private struct LogsView: View {
     private let rows = LogRow.sampleRows
 
     var body: some View {
@@ -50,6 +76,39 @@ struct ContentView: View {
                 .padding(.vertical, 4)
             }
             .navigationTitle("V1 Logs")
+        }
+    }
+}
+
+private struct ConversationView: View {
+    @ObservedObject var store: ConversationStore
+
+    private let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    var body: some View {
+        NavigationStack {
+            List(store.messages) { message in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(formatter.string(from: message.timestamp))
+                            .font(.caption.monospaced())
+                        Text(message.sender)
+                            .font(.caption.weight(.semibold))
+                    }
+                    Text(message.text)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+            }
+            .navigationTitle("Conversation")
+            .refreshable {
+                await store.refresh()
+            }
         }
     }
 }
