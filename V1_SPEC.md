@@ -16,6 +16,3 @@ Scope (v1 only):
 - iPhone receives log stream
 - UI renders rows with the 7 fields above
 
-Out of scope:
-- uptime/stats/counters
-- commands/chat/audio
