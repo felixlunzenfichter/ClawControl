@@ -1,0 +1,66 @@
+name: PR Policy Guard
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, labeled, unlabeled, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce story/impl policy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = (pr.labels || []).map(l => l.name.toLowerCase());
+            const isStory = labels.includes('story');
+            const isImpl = labels.includes('impl');
+
+            if ((isStory && isImpl) || (!isStory && !isImpl)) {
+              core.setFailed('PR must have exactly one label: story or impl.');
+              return;
+            }
+
+            if (isStory) {
+              return;
+            }
+
+            const body = pr.body || '';
+            const match = body.match(/Story-PR:\s*#(\d+)/i) || body.match(/(?:story\s*pr|story)\s*#(\d+)/i);
+            if (!match) {
+              core.setFailed('Impl PR must reference a Story PR in the body, e.g. `Story-PR: #123`.');
+              return;
+            }
+
+            const storyNumber = Number(match[1]);
+            const { data: storyPr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: storyNumber,
+            });
+
+            const storyLabels = (storyPr.labels || []).map(l => (l.name || '').toLowerCase());
+            if (!storyLabels.includes('story')) {
+              core.setFailed(`Referenced PR #${storyNumber} is not labeled story.`);
+              return;
+            }
+
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: storyNumber,
+            });
+            const hasApproval = reviews.some(r => r.state === 'APPROVED');
+            if (!hasApproval) {
+              core.setFailed(`Referenced Story PR #${storyNumber} must have at least one approval.`);
+              return;
+            }
+
+            if (!storyPr.merged_at) {
+              core.setFailed(`Referenced Story PR #${storyNumber} must be merged before implementation PRs.`);
+            }
