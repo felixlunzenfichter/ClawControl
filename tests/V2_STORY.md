@@ -1,19 +1,22 @@
 # V2 Story Contract
 
-## Story: Startup ping/pong in same conversation thread
+## Story: iPad↔Mac TCP handshake + same-session pong
 
-### Step 1 — Startup auto-send
-- App starts.
-- Expected action: app sends exactly `ping hello` once.
-
-### Step 2 — Conversation reply
-- Same conversation thread receives a reply containing `pong`.
+### Ordered chain (required)
+1. `ipad_started`
+2. `start_received session=...`
+3. `handshake_ack session=... ready=true`
+4. `handshake_confirmed session=...`
+5. `ping hello`
+6. `pong_sent session=...`
+7. `pong_received_same_session`
 
 ### Pass condition
-- Story passes only when `pong` is observed in the **same thread** as startup `ping hello`.
+- PASS only if the full chain appears in this exact order in canonical logs.
 
 ### Fail conditions
-- `ping hello` not sent.
-- `ping hello` sent more than once on startup.
-- `pong` never observed.
-- `pong` observed in a different thread.
+- iPad does not open TCP connection to Mac.
+- `start` is not sent.
+- `handshake_ack` is missing/invalid.
+- `pong` arrives with a different session id.
+- Any ordered-chain step is missing or out of order.

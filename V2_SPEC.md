@@ -1,27 +1,23 @@
 # V2_SPEC.md
 
-Goal: add conversation screen as second screen while keeping logs screen.
+Goal: replace chat-thread ping/pong with a direct iPad↔Mac TCP handshake story on local network.
 
-## Screens
-1. Logs Screen
-2. Conversation Screen (this current chat thread)
+## Canonical V2 story
+1. iPad starts and opens TCP connection to Mac server (local network).
+2. iPad sends `start` and first log `ipad_started`.
+3. Mac replies `handshake_ack` (session id + ready).
+4. iPad logs `handshake_confirmed`.
+5. iPad sends `ping hello` event/log to Mac.
+6. Mac replies `pong` in the same session.
+7. iPad logs `pong_received_same_session`.
+8. Story PASS only when this ordered chain appears in logs.
 
-## Required v2 behavior
-1. On app start, automatically send one message: `ping hello`.
-2. That message must land in this current conversation.
-3. Conversation thread must receive a reply containing: `pong`.
-4. V2 story/test passes only when `pong` is observed in the same conversation thread.
-5. Conversation Screen must display this exact live conversation thread (same messages as here).
-6. User can switch between:
-   - Logs Screen
-   - Conversation Screen
-
-## Minimal data shown on Conversation Screen
-- message timestamp
-- sender
-- message text
+## Logging contract (unchanged)
+Each log line must stay in canonical format:
+`timestamp | mode | device | type | file | function | message`
 
 ## Done criteria
-- Auto `ping hello` is sent once on startup and appears in this chat.
-- Conversation Screen on iPad shows this same conversation.
-- Logs Screen still works as before.
+- Mac server accepts TCP client from iPad on LAN.
+- iPad runs the handshake flow on startup.
+- Ordered V2 chain is visible in logs and validated by story runner.
+- Logs screen continues to parse and render canonical log lines.

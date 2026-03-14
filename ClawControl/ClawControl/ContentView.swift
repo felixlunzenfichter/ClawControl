@@ -119,10 +119,10 @@ private extension LogRow {
         .compactMap { parse(String($0)) }
 
     static let sampleLogLines = """
-13:53:30.021 | PROD | Mac | LOG | mac-server | start | Mac server started
-13:53:30.022 | PROD | Mac | LOG | mac-server | handleCommand | Received command: gateway.connect
-13:53:30.022 | PROD | Mac | LOG | mac-server | connectGateway | Connecting to OpenClaw Gateway
-13:53:30.022 | PROD | Mac | LOG | mac-server | connectGateway | Connected to OpenClaw Gateway
+14:11:40.101 | PROD | Mac | LOG | mac-server | start | Mac server started tcp://0.0.0.0:7878
+14:11:40.212 | PROD | iPad | LOG | conversation-store | onAppStart() | ipad_started
+14:11:40.290 | PROD | Mac | LOG | mac-server | startTcpServer | handshake_ack session=s-abc123 ready=true
+14:11:40.311 | PROD | iPad | LOG | conversation-store | onAppStart() | pong_received_same_session
 """
 
     static func parse(_ line: String) -> LogRow? {

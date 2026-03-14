@@ -1,9 +1,136 @@
 import Foundation
 import Combine
+import Network
 
 protocol ConversationService {
     func fetchMessages(threadId: String) async throws -> [ConversationMessage]
     func send(text: String, threadId: String) async throws
+}
+
+private enum CanonicalLog {
+    static func timestamp(_ date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter.string(from: date)
+    }
+
+    static func emit(mode: String = "PROD", device: String = "iPad", type: String = "LOG", file: String, function: String, message: String) {
+        print("\(timestamp()) | \(mode) | \(device) | \(type) | \(file) | \(function) | \(message)")
+    }
+}
+
+struct HandshakeAck: Decodable {
+    let type: String
+    let sessionId: String
+    let ready: Bool
+}
+
+struct PongEnvelope: Decodable {
+    let type: String
+    let sessionId: String
+}
+
+actor TCPHandshakeClient {
+    private let host: String
+    private let port: UInt16
+
+    init(host: String, port: UInt16) {
+        self.host = host
+        self.port = port
+    }
+
+    func runHandshake() async throws -> String {
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    continuation.resume(returning: ())
+                case .failed(let error):
+                    continuation.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global())
+        }
+
+        try await sendLine("start", connection: connection)
+        let ackLine = try await receiveLine(connection: connection)
+        let ack = try JSONDecoder().decode(HandshakeAck.self, from: Data(ackLine.utf8))
+
+        guard ack.type == "handshake_ack", ack.ready else {
+            throw NSError(domain: "Handshake", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid handshake ack"])
+        }
+
+        try await sendLine("ping hello|\(ack.sessionId)", connection: connection)
+        let pongLine = try await receiveLine(connection: connection)
+        let pong = try JSONDecoder().decode(PongEnvelope.self, from: Data(pongLine.utf8))
+
+        guard pong.type == "pong" else {
+            throw NSError(domain: "Handshake", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid pong"])
+        }
+
+        connection.cancel()
+
+        guard pong.sessionId == ack.sessionId else {
+            throw NSError(domain: "Handshake", code: 3, userInfo: [NSLocalizedDescriptionKey: "Pong session mismatch"])
+        }
+
+        return ack.sessionId
+    }
+
+    private func sendLine(_ line: String, connection: NWConnection) async throws {
+        let data = Data((line + "\n").utf8)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            })
+        }
+    }
+
+    private func receiveLine(connection: NWConnection) async throws -> String {
+        var full = Data()
+
+        while true {
+            let chunk = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+
+                    if let data {
+                        continuation.resume(returning: data)
+                        return
+                    }
+
+                    if isComplete {
+                        continuation.resume(returning: Data())
+                    }
+                }
+            }
+
+            if chunk.isEmpty {
+                throw NSError(domain: "Handshake", code: 4, userInfo: [NSLocalizedDescriptionKey: "Connection closed before newline"])
+            }
+
+            full.append(chunk)
+            if let newlineIndex = full.firstIndex(of: 0x0A) {
+                let lineData = full.prefix(upTo: newlineIndex)
+                guard let line = String(data: lineData, encoding: .utf8) else {
+                    throw NSError(domain: "Handshake", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid UTF-8"])
+                }
+                return line.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+    }
 }
 
 @MainActor
@@ -24,10 +151,22 @@ final class ConversationStore: ObservableObject {
         guard !didSendStartupMessage else { return }
         didSendStartupMessage = true
 
+        CanonicalLog.emit(file: "conversation-store", function: #function, message: "ipad_started")
+
+        let host = ProcessInfo.processInfo.environment["CLAW_MAC_HOST"] ?? "Felixs-MacBook-Pro.local"
+        let port = UInt16(ProcessInfo.processInfo.environment["CLAW_MAC_PORT"] ?? "7878") ?? 7878
+
         do {
-            try await service.send(text: "ping hello", threadId: currentThreadId)
+            let client = TCPHandshakeClient(host: host, port: port)
+            let sessionId = try await client.runHandshake()
+            CanonicalLog.emit(file: "conversation-store", function: #function, message: "handshake_confirmed session=\(sessionId)")
+            CanonicalLog.emit(file: "conversation-store", function: #function, message: "ping hello")
+            observedPongInCurrentThread = true
+            CanonicalLog.emit(file: "conversation-store", function: #function, message: "pong_received_same_session")
+            print("AUTO_TEST_PASS: ordered V2 handshake chain observed")
         } catch {
-            // keep app resilient; logging screen remains available
+            CanonicalLog.emit(type: "ERROR", file: "conversation-store", function: #function, message: "v2_handshake_failed error=\(error.localizedDescription)")
+            print("AUTO_TEST_FAIL: ordered V2 handshake chain missing")
         }
 
         await refresh()
@@ -37,10 +176,6 @@ final class ConversationStore: ObservableObject {
         do {
             let incoming = try await service.fetchMessages(threadId: currentThreadId)
             messages = ConversationState.merged(existing: messages, incoming: incoming)
-            observedPongInCurrentThread = messages.contains {
-                $0.threadId == currentThreadId && $0.text.localizedCaseInsensitiveContains("pong")
-            }
-            print(observedPongInCurrentThread ? "AUTO_TEST_PASS: observed pong in same thread" : "AUTO_TEST_FAIL: pong not observed in same thread")
         } catch {
             // keep existing messages on transient failures
         }
@@ -68,17 +203,5 @@ final class InMemoryConversationService: ConversationService {
                 text: text
             )
         )
-
-        if text == "ping hello" {
-            storage.append(
-                ConversationMessage(
-                    id: UUID().uuidString,
-                    threadId: threadId,
-                    timestamp: Date().addingTimeInterval(0.1),
-                    sender: "assistant",
-                    text: "pong"
-                )
-            )
-        }
     }
 }

@@ -12,50 +12,50 @@ function tempLogsDir(name) {
   return dir;
 }
 
-test('Connect story passes from ordered logs only', async () => {
+test('V2 handshake story passes from ordered logs only', { concurrency: false }, async () => {
   const result = await runStory({
     storyPath: 'tests/STORY.md',
     logsDir: tempLogsDir('pass'),
-    gatewayClient: { connect: async () => ({ ok: true }) }
+    gatewayClient: { connect: async () => ({ ok: true }) },
+    tcpPort: 7878
   });
 
   assert.equal(result.pass, true);
   assert.equal(result.missing, undefined);
-  assert.equal(result.stepResults[0].result, 'Connected to OpenClaw Gateway');
+  assert.match(result.stepResults[0].result, /V2 handshake completed/);
 });
 
-test('unified log line format is canonical', async () => {
+test('unified log line format is canonical', { concurrency: false }, async () => {
   const result = await runStory({
     storyPath: 'tests/STORY.md',
     logsDir: tempLogsDir('format'),
-    gatewayClient: { connect: async () => ({ ok: true }) }
+    gatewayClient: { connect: async () => ({ ok: true }) },
+    tcpPort: 7879
   });
 
-  const lines = fs.readFileSync(result.logPath, 'utf8').trim().split('\n');
-  assert.ok(lines.length >= 4);
+  assert.ok(result.lines.length >= 8);
 
-  const linePattern = /^\d{2}:\d{2}:\d{2}\.\d{3} \| (AUTO|MANUAL|PROD) \| Mac \| (LOG|ERROR) \| [^|]+ \| [^|]+ \| .+$/;
-  for (const line of lines) {
+  const linePattern = /^\d{2}:\d{2}:\d{2}\.\d{3} \| (AUTO|MANUAL|PROD) \| (Mac|iPad) \| (LOG|ERROR) \| [^|]+ \| [^|]+ \| .+$/;
+  for (const line of result.lines) {
     assert.match(line, linePattern);
   }
 });
 
 test('ordered log matcher fails deterministically for missing/out-of-order logs', () => {
   const messages = [
-    'Mac server started',
-    'Connecting to OpenClaw Gateway',
-    'Received command: gateway.connect',
-    'Connected to OpenClaw Gateway'
+    'Mac server started tcp://0.0.0.0:7878',
+    'ipad_started',
+    'handshake_confirmed session=s-1',
+    'start_received session=s-1'
   ];
 
   const expected = [
-    'Mac server started',
-    'Received command: gateway.connect',
-    'Connecting to OpenClaw Gateway',
-    'Connected to OpenClaw Gateway'
+    'ipad_started',
+    'start_received session=',
+    'handshake_confirmed session='
   ];
 
   const result = assertOrdered(messages, expected);
   assert.equal(result.pass, false);
-  assert.equal(result.missing, 'Connecting to OpenClaw Gateway');
+  assert.equal(result.missing, 'handshake_confirmed session=');
 });
