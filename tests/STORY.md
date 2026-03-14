@@ -2,15 +2,21 @@
 
 ```json
 [
-  { "action": "Server started", "result": "server_started" },
+  {
+    "action": "Server started",
+    "result": "Mac server started",
+    "expectedLogs": [
+      "Mac server started"
+    ]
+  },
   {
     "action": "Connect to Gateway",
     "command": "gateway.connect",
     "result": "Connected to OpenClaw Gateway",
     "expectedLogs": [
-      "command_received:gateway.connect",
-      "gateway_connect_started",
-      "gateway_connected"
+      "Received command: gateway.connect",
+      "Connecting to OpenClaw Gateway",
+      "Connected to OpenClaw Gateway"
     ]
   }
 ]
