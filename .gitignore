@@ -1,3 +1,6 @@
 node_modules/
 private/logs/
 private/logs-test/
+.DS_Store
+*.xcuserstate
+**/xcuserdata/
