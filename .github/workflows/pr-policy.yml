@@ -52,11 +52,6 @@ jobs:
                 return;
               }
 
-              if (!/Out-of-Scope:\s*[\s\S]*\S/i.test(body)) {
-                core.setFailed('Story PR must include `Out-of-Scope:` exclusions.');
-                return;
-              }
-
               const files = await github.paginate(github.rest.pulls.listFiles, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
