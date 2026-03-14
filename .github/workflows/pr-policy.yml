@@ -38,12 +38,7 @@ jobs:
 
               let openStoryCount = 0;
               for (const p of openPulls) {
-                const { data: issue } = await github.rest.issues.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: p.number,
-                });
-                const ls = (issue.labels || []).map(l => (l.name || '').toLowerCase());
+                const ls = (p.labels || []).map(l => (l.name || '').toLowerCase());
                 if (ls.includes('story')) openStoryCount++;
               }
 
@@ -62,6 +57,31 @@ jobs:
                 return;
               }
 
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              const changed = files.map(f => f.filename);
+              const invalid = changed.filter(f => f !== 'STORY.md');
+              if (invalid.length > 0) {
+                core.setFailed(`Story PRs may change only STORY.md. Found: ${invalid.join(', ')}`);
+                return;
+              }
+
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const changed = files.map(f => f.filename);
+            if (changed.includes('STORY.md')) {
+              core.setFailed('Impl PRs must not modify STORY.md.');
               return;
             }
 
