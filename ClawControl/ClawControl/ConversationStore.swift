@@ -8,6 +8,8 @@ protocol ConversationService {
 }
 
 private enum CanonicalLog {
+    private static let evidenceFileName = "v2-handshake-evidence.log"
+
     static func timestamp(_ date: Date = Date()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -15,8 +17,35 @@ private enum CanonicalLog {
         return formatter.string(from: date)
     }
 
+    static func resetEvidenceLog() {
+        guard let url = evidenceFileURL() else { return }
+        try? "".write(to: url, atomically: true, encoding: .utf8)
+    }
+
     static func emit(mode: String = "PROD", device: String = "iPad", type: String = "LOG", file: String, function: String, message: String) {
-        print("\(timestamp()) | \(mode) | \(device) | \(type) | \(file) | \(function) | \(message)")
+        let line = "\(timestamp()) | \(mode) | \(device) | \(type) | \(file) | \(function) | \(message)"
+        print(line)
+        appendToEvidenceLog(line)
+    }
+
+    private static func evidenceFileURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(evidenceFileName)
+    }
+
+    private static func appendToEvidenceLog(_ line: String) {
+        guard let url = evidenceFileURL() else { return }
+        let payload = Data((line + "\n").utf8)
+
+        if FileManager.default.fileExists(atPath: url.path) {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try? handle.seekToEnd()
+                try? handle.write(contentsOf: payload)
+            }
+            return
+        }
+
+        try? payload.write(to: url)
     }
 }
 
@@ -150,6 +179,7 @@ final class ConversationStore: ObservableObject {
     func onAppStart() async {
         guard !didSendStartupMessage else { return }
         didSendStartupMessage = true
+        CanonicalLog.resetEvidenceLog()
 
         CanonicalLog.emit(file: "conversation-store", function: #function, message: "ipad_started")
 
