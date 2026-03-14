@@ -91,19 +91,33 @@ private struct ConversationView: View {
 
     var body: some View {
         NavigationStack {
-            List(store.messages) { message in
-                VStack(alignment: .leading, spacing: 4) {
+            List {
+                Section {
                     HStack(spacing: 8) {
-                        Text(formatter.string(from: message.timestamp))
-                            .font(.caption.monospaced())
-                        Text(message.sender)
-                            .font(.caption.weight(.semibold))
+                        Image(systemName: store.observedPongInCurrentThread ? "checkmark.circle.fill" : "hourglass")
+                            .foregroundStyle(store.observedPongInCurrentThread ? .green : .orange)
+                        Text(store.observedPongInCurrentThread ? "V2 handshake complete" : "V2 handshake in progress")
+                            .font(.subheadline.weight(.semibold))
                     }
-                    Text(message.text)
-                        .font(.body)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 4)
+
+                Section {
+                    ForEach(store.messages) { message in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Text(formatter.string(from: message.timestamp))
+                                    .font(.caption.monospaced())
+                                Text(message.sender)
+                                    .font(.caption.weight(.semibold))
+                            }
+                            Text(message.text)
+                                .font(.body)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
             }
             .navigationTitle("Conversation")
             .refreshable {

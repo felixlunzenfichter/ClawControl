@@ -117,6 +117,7 @@ async function runV2HandshakeClient({ mode = 'PROD', logsDir, host, port }) {
   });
 
   logger.log('ipad_started', 'v2-client', 'runV2HandshakeClient');
+  await sleep(15);
   socket.write('start\n');
 
   const ackRaw = await readLineFromSocket(socket);
