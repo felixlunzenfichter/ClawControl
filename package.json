@@ -1,0 +1,11 @@
+{
+  "name": "clawcontrol-mac-server-v0",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/index.js",
+    "story": "node src/index.js --story"
+  }
+}
